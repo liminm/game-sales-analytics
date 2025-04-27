@@ -192,3 +192,139 @@ resource "google_project_iam_member" "vm_cloudsql_client" {
   role    = "roles/cloudsql.client"
   member  = "serviceAccount:${data.google_service_account.airflow.email}"
 }
+
+# Create a Service Account via the beta provider
+resource "google_service_account" "airflow_proxy" {
+  provider     = google-beta
+  account_id   = "airflow-proxy"
+  display_name = "Airflow Cloud SQL Proxy Service Account"
+  project      = var.gcp_project_id
+}
+
+# Grant it the client role
+resource "google_project_iam_member" "proxy_cloudsql_client" {
+  project = var.gcp_project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.airflow_proxy.email}"
+}
+
+
+# --- leave the key resource exactly as is -------------------
+resource "google_service_account_key" "airflow_proxy_key" {
+  service_account_id = google_service_account.airflow_proxy.name
+  private_key_type   = "TYPE_GOOGLE_CREDENTIALS_FILE"
+}
+
+resource "local_file" "sa_key_json" {
+  filename        = "../.gcp/gcp_sa_key.json"
+  file_permission = "0440"
+
+  # decode the blob that the provider returns
+  content = base64decode(
+    google_service_account_key.airflow_proxy_key.private_key
+  )
+}
+
+# define the VM blueprint that installs Docker, pulls your repo, then runs docker-compose
+resource "google_compute_instance_template" "airflow" {
+  name    = "airflow-template"
+  project = var.gcp_project_id
+  region  = var.gcp_region
+
+  # small production-ready machine; adjust as needed
+  machine_type = "e2-standard-2"
+
+
+  # define the boot disk (50 GB SSD from Debian-12 family)
+  disk {
+    auto_delete  = true
+    boot         = true
+    source_image = "projects/debian-cloud/global/images/family/debian-12"
+    disk_size_gb = 50
+    disk_type    = "pd-ssd"
+  }
+
+
+  # let the VM act as your data-pipeline SA for GCS, BQ, Dataproc, Cloud SQL
+  service_account {
+    email  = google_service_account.data_pipeline_sa.email
+    scopes = ["cloud-platform"]
+  }
+
+  # tag instances “airflow” for firewall rules
+  tags = ["airflow"]
+
+  network_interface {
+    network    = "default"
+    # assign external IP so you can reach 8080
+    access_config {}
+  }
+
+  metadata = {
+    # runs on first boot – installs Docker + Compose, clones your repo, then starts Airflow
+    startup-script = <<-EOF
+      #!/usr/bin/env bash
+
+      # install Docker, Compose, git & curl
+      apt-get update -y
+      apt-get install -y docker.io docker-compose git curl
+
+      # let Docker talk to Artifact Registry
+      gcloud auth configure-docker ${var.gcp_region}-docker.pkg.dev --quiet
+
+      # grab your repo (HTTPS clone; replace with SSH if you’ve set up keys)
+      rm -rf /opt/airflow
+      git clone --depth 1 https://github.com/liminm/game-sales-analytics /opt/airflow
+
+      # start the Airflow stack
+      cd /opt/airflow
+      docker-compose up -d
+    EOF
+  }
+}
+
+
+
+
+
+# create a regional MIG so Terraform can scale or heal your Airflow VMs
+resource "google_compute_region_instance_group_manager" "airflow_mig" {
+  name               = "airflow-mig"
+  project            = var.gcp_project_id
+  region             = var.gcp_region
+
+  # reference the template above
+  version {
+    instance_template = google_compute_instance_template.airflow.self_link
+  }
+
+  # VM names will start with “airflow-”
+  base_instance_name = "airflow"
+  # start with one VM; you can increase later
+  target_size        = 1
+}
+
+
+# allow SSH (22) and Airflow UI (8080) from anywhere
+resource "google_compute_firewall" "airflow_allow" {
+  name    = "airflow-allow"
+  project = var.gcp_project_id
+  network = "default"
+
+  # open ports
+  allow {
+    protocol = "tcp"
+    ports    = ["22", "8080"]
+  }
+
+  # be careful in prod—restrict this CIDR if needed
+  source_ranges = ["0.0.0.0/0"]
+
+  # apply to VMs tagged “airflow”
+  target_tags = ["airflow"]
+}
+
+
+
+
+
