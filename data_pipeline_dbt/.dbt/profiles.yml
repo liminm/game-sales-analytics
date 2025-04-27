@@ -1,0 +1,18 @@
+# ~/.dbt/profiles.yml
+
+# Existing project’s profile
+data_pipeline_dbt:
+  # default outputs key to use
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      keyfile: /opt/airflow/keys/gcp_sa_key.json
+      project: data-eng-zcamp-liminm
+      dataset: data_eng_zcamp_liminm_bq_bucket
+      location: EU
+      priority: interactive
+      threads: 1
+      job_execution_timeout_seconds: 300
+      job_retries: 1

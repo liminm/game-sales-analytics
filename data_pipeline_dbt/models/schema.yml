@@ -1,0 +1,106 @@
+version: 2
+
+sources:
+#  - name: data_eng_zcamp_liminm_bq_bucket
+#    tables:
+#      - name: green_tripdata_2019_01
+#        description: "Raw green trip data loaded from GCS via Airflow"
+
+  - name: raw
+    tables:
+      - name: video_game_sales
+        description: "Raw video game sales data loaded from GCS via Airflow"
+
+models:
+#  - name: stg_green_tripdata
+#    description: "Staging model for green trip data"
+#    columns:
+#      - name: pickup_datetime
+#        description: "The date and time of pickup"
+#        tests:
+#          - not_null
+#      - name: dropoff_datetime
+#        description: "The date and time of dropoff"
+#        tests:
+#          - not_null
+#      - name: passenger_count
+#        description: "Number of passengers"
+#        tests:
+#          - not_null
+#      - name: trip_distance
+#        description: "Distance of the trip in miles"
+#        tests:
+#          - not_null
+#      - name: fare_amount
+#        description: "The fare amount"
+#        tests:
+#          - not_null
+#      - name: total_amount
+#        description: "Total charged amount"
+#        tests:
+#          - not_null
+
+  - name: stg_video_game_sales
+    description: "Staging model for the raw video game sales CSV"
+    columns:
+      - name: rank
+        description: "Rank of the game by sales"
+        tests:
+          - not_null
+          - unique
+      - name: name
+        description: "Name of the video game"
+        tests:
+          - not_null
+      - name: platform
+        description: "Platform the game was released on"
+        tests:
+          - not_null
+      - name: year
+        description: "Release year of the game"
+        tests:
+          - not_null
+      - name: genre
+        description: "Genre of the game"
+      - name: publisher
+        description: "Publisher of the game"
+      - name: na_sales
+        description: "North America sales (millions)"
+      - name: eu_sales
+        description: "Europe sales (millions)"
+      - name: jp_sales
+        description: "Japan sales (millions)"
+      - name: other_sales
+        description: "Other regions sales (millions)"
+      - name: global_sales
+        description: "Total global sales (millions)"
+        tests:
+          - not_null
+
+#  - name: fact_trip_summary
+#    description: "Daily summary of green trip data"
+#    columns:
+#      - name: trip_date
+#        description: "Date of the trip"
+#        tests:
+#          - not_null
+#      - name: total_trips
+#        description: "Number of trips per day"
+#      - name: total_distance
+#        description: "Sum of trip distances per day"
+#      - name: total_fare
+#        description: "Sum of fare amounts per day"
+
+  - name: fact_video_game_summary
+    description: "Yearly summary of video game sales"
+    columns:
+      - name: year
+        description: "Release year of the games"
+        tests:
+          - not_null
+      - name: num_games
+        description: "Number of distinct games released in that year"
+      - name: total_global_sales
+        description: "Total global sales across all games that year"
+      - name: avg_global_sales
+        description: "Average global sales per game that year"

@@ -1,0 +1,4 @@
+google-cloud-storage
+requests
+dbt-core
+dbt-bigquery

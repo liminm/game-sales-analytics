@@ -1,0 +1,184 @@
+version: '3'
+
+
+services:
+#  airflow-db:
+#    image: postgres:13
+#    container_name: airflow-db
+#    environment:
+#      - POSTGRES_USER=airflow
+#      - POSTGRES_PASSWORD=airflow
+#      - POSTGRES_DB=airflow
+#    healthcheck:
+#      test: [ "CMD", "pg_isready", "-U", "airflow" ]
+#      interval: 5s
+#      retries: 5
+#    volumes:
+#      - postgres_db_volume:/var/lib/postgresql/data
+
+
+  cloud-sql-proxy:
+    # official v2 container
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.10.0
+    # run as a daemon listening on all interfaces, port 5432
+    command: >
+      /cloud-sql-proxy
+      ${CLOUD_SQL_CONNECTION_NAME}
+      --address 0.0.0.0
+      --port 5432
+    # always restart with the rest of the stack
+    restart: always
+    # host networking so 0.0.0.0:5432 is reachable by sibling containers
+    network_mode: host
+    # use the same service account key file you already mount
+    volumes:
+      - ../.gcp/gcp_sa_key.json:/config/sa.json:ro
+    environment:
+      # point proxy at the key
+      - GOOGLE_APPLICATION_CREDENTIALS=/config/sa.json
+
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: airflow-with-dbt:2.10.5
+    container_name: airflow-webserver
+    hostname: airflow-webserver
+    depends_on:
+      - airflow-db
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__FERNET_KEY=xhag_grOHXEReJ-0smqPSepma0R1dDNZJNY_Gvwci1E=
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+#      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:${POSTGRES_PW}@localhost:5432/airflow
+      - AIRFLOW_UID=50000
+      - AIRFLOW_GID=50000
+      - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/keys/gcp_sa_key.json
+      - AIRFLOW__WEBSERVER__SECRET_KEY=your_consistent_secret_key
+#      - DBT_PROFILES_DIR=/home/airflow/.dbt
+      - DBT_PROFILES_DIR=/opt/airflow/dbt_project/.dbt
+
+
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ../data_pipeline_dbt:/opt/airflow/dbt_project:ro
+#      - ~/.dbt:/home/airflow/.dbt:ro      # ← mount your real profiles here
+      - ../data_pipeline_dbt/.dbt:/opt/airflow/dbt_project/.dbt:ro
+      - ./logs:/opt/airflow/logs
+      - ../.gcp/gcp_sa_key.json:/opt/airflow/keys/gcp_sa_key.json:ro
+      - dbt_target:/opt/airflow/dbt_project/target:rw
+
+
+    command: >
+      bash -c "
+      airflow db upgrade &&
+      airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
+      (airflow connections get 'google_cloud_default' || airflow connections add 'google_cloud_default' --conn-type 'google_cloud_platform' --conn-extra '{\"project\": \"data-eng-zcamp-liminm\", \"key_path\": \"/opt/airflow/keys/gcp_sa_key.json\"}') &&
+      airflow webserver
+      "
+
+#    command: >
+#      bash -c "
+#      airflow db migrate &&
+#      airflow api-server
+#      "
+
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: airflow-with-dbt:2.10.5
+    container_name: airflow-scheduler
+    hostname: airflow-scheduler
+    depends_on:
+      - airflow-db
+      - airflow-webserver
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+#      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:${POSTGRES_PW}@localhost:5432/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW_UID=50000
+      - AIRFLOW_GID=50000
+      - AIRFLOW__WEBSERVER__SECRET_KEY=your_consistent_secret_key
+      - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/keys/gcp_sa_key.json
+      - AIRFLOW__CORE__FERNET_KEY=xhag_grOHXEReJ-0smqPSepma0R1dDNZJNY_Gvwci1E=
+#      - DBT_PROFILES_DIR=/home/airflow/.dbt
+      - DBT_PROFILES_DIR=/opt/airflow/dbt_project/.dbt
+
+
+    volumes:
+#      - ./dags:/opt/airflow/dags
+#      - ./logs:/opt/airflow/logs
+#      - ./data_pipeline_dbt:/opt/airflow/dbt_project:ro
+#
+#      # mount your host's ~/.dbt (which contains profiles.yml)
+#      - ~/.dbt:/home/airflow/.dbt:ro
+#
+#      - /home/limin/PycharmProjects/data-engineering-zoomcamp/data-eng-zcamp-liminm-283d5c1e9fbd.json:/opt/airflow/keys/gcp_sa_key.json:ro
+      - ./dags:/opt/airflow/dags
+      - ../data_pipeline_dbt:/opt/airflow/dbt_project:ro
+      - ~/.dbt:/home/airflow/.dbt:ro
+      - ./logs:/opt/airflow/logs
+      - ../.gcp/gcp_sa_key.json:/opt/airflow/keys/gcp_sa_key.json:ro
+      - ./airflow_dbt_logs:/opt/airflow/dbt_project/logs
+      - dbt_target:/opt/airflow/dbt_project/target:rw
+
+
+#    command: >
+#      bash -c "
+#      airflow scheduler
+#      "
+
+    command: >
+      bash -c "
+      airflow db upgrade &&
+      airflow scheduler
+      "
+
+  airflow-triggerer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: airflow-with-dbt:2.10.5
+    container_name: airflow-triggerer
+    hostname: airflow-triggerer
+    depends_on:
+      - airflow-db
+      - airflow-webserver
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+#      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:${POSTGRES_PW}@localhost:5432/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW_UID=50000
+      - AIRFLOW_GID=50000
+      - AIRFLOW__WEBSERVER__SECRET_KEY=your_consistent_secret_key
+      - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/keys/gcp_sa_key.json
+      - AIRFLOW__CORE__FERNET_KEY=xhag_grOHXEReJ-0smqPSepma0R1dDNZJNY_Gvwci1E=
+
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ../data_pipeline_dbt:/opt/airflow/dbt_project
+      - ../data_pipeline_dbt/.dbt:/opt/airflow/dbt_project/.dbt
+      - /home/limin/PycharmProjects/data-engineering-zoomcamp/data-eng-zcamp-liminm-283d5c1e9fbd.json:/opt/airflow/keys/gcp_sa_key.json:ro
+      - dbt_target:/opt/airflow/dbt_project/target:rw
+
+#    command: airflow triggerer
+
+    command: >
+      bash -c "
+      airflow db upgrade &&
+      airflow triggerer
+      "
+
+volumes:
+  postgres_db_volume:
+  dbt_target:
