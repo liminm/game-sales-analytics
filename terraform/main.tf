@@ -355,3 +355,23 @@ resource "google_bigquery_dataset_iam_member" "proxy_bq_dataeditor" {
   member   = "serviceAccount:${google_service_account.airflow_proxy.email}"
 }
 
+# ─── Artifact Registry: allow pushes ────────────────────────────────────────────
+resource "google_artifact_registry_repository_iam_member" "airflow_repo_writer" {
+  project    = var.gcp_project_id
+  location   = var.gcp_region                    # "us-central1"
+  repository = google_artifact_registry_repository.airflow_docker_repo.repository_id
+  role       = "roles/artifactregistry.writer"
+
+  # 👇 the principal that runs `docker push`
+  member     = "serviceAccount:l6194005@data-eng-zcamp-liminm.iam.gserviceaccount.com"
+}
+
+# ─── VM may pull any tags from the repo ────────────────────────────────────────
+resource "google_artifact_registry_repository_iam_member" "airflow_repo_reader" {
+  project    = var.gcp_project_id
+  location   = var.gcp_region                       # us-central1
+  repository = google_artifact_registry_repository.airflow_docker_repo.repository_id
+  role       = "roles/artifactregistry.reader"
+
+  member     = "serviceAccount:l6194005@data-eng-zcamp-liminm.iam.gserviceaccount.com"
+}

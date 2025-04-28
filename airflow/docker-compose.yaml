@@ -71,10 +71,11 @@ services:
       - "data-eng-zcamp-liminm:us-central1:airflow-postgres"
 
   airflow-webserver:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: airflow-with-dbt:2.10.5
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    image: airflow-with-dbt:2.10.5
+    image: us-central1-docker.pkg.dev/data-eng-zcamp-liminm/airflow-docker/airflow-with-dbt:2.10.5
     container_name: airflow-webserver
     hostname: airflow-webserver
     depends_on:
@@ -129,10 +130,11 @@ services:
 
 
   airflow-scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: airflow-with-dbt:2.10.5
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    image: airflow-with-dbt:2.10.5
+    image: us-central1-docker.pkg.dev/data-eng-zcamp-liminm/airflow-docker/airflow-with-dbt:2.10.5
     container_name: airflow-scheduler
     hostname: airflow-scheduler
     depends_on:
@@ -180,10 +182,11 @@ services:
   #      "
 
   airflow-triggerer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: airflow-with-dbt:2.10.5
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    image: airflow-with-dbt:2.10.5
+    image: us-central1-docker.pkg.dev/data-eng-zcamp-liminm/airflow-docker/airflow-with-dbt:2.10.5
     container_name: airflow-triggerer
     hostname: airflow-triggerer
     depends_on:
