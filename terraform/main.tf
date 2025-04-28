@@ -293,22 +293,51 @@ resource "google_compute_instance_template" "airflow" {
 
 
 
-# create a regional MIG so Terraform can scale or heal your Airflow VMs
-resource "google_compute_region_instance_group_manager" "airflow_mig" {
-  name               = "airflow-mig"
-  project            = var.gcp_project_id
-  region             = var.gcp_region
+# # create a regional MIG so Terraform can scale or heal your Airflow VMs
+# resource "google_compute_region_instance_group_manager" "airflow_mig" {
+#   name               = "airflow-mig"
+#   project            = var.gcp_project_id
+#   region             = var.gcp_region
+#
+#   # reference the template above
+#   version {
+#     instance_template = google_compute_instance_template.airflow.self_link
+#   }
+#
+#   # VM names will start with “airflow-”
+#   base_instance_name = "airflow"
+#   # start with one VM; you can increase later
+#   target_size        = 1
+#
+#     # 🚀 always roll out new templates automatically
+#   update_policy {
+#     type                    = "PROACTIVE"   # start immediately
+#     minimal_action          = "REPLACE"     # create new VM, then delete old
+#     max_surge_fixed         = 1             # allow one extra VM during update
+#     max_unavailable_fixed   = 0             # never take the service completely down
+#   }
+# }
 
-  # reference the template above
+resource "google_compute_instance_group_manager" "airflow_mig" {
+  name    = "airflow-mig"
+  zone    = "us-central1-b"          # zonal instead of regional
+  project = var.gcp_project_id
+
   version {
     instance_template = google_compute_instance_template.airflow.self_link
   }
-
-  # VM names will start with “airflow-”
   base_instance_name = "airflow"
-  # start with one VM; you can increase later
-  target_size        = 1
+
+  target_size = 1
+
+  update_policy {
+    type                  = "PROACTIVE"
+    minimal_action        = "REPLACE"
+    max_surge_fixed       = 1   # allowed for zonal MIG
+    max_unavailable_fixed = 0
+  }
 }
+
 
 
 # allow SSH (22) and Airflow UI (8080) from anywhere
@@ -378,5 +407,13 @@ resource "google_artifact_registry_repository_iam_member" "airflow_repo_reader" 
   repository = google_artifact_registry_repository.airflow_docker_repo.repository_id
   role       = "roles/artifactregistry.reader"
 
+  member     = "serviceAccount:l6194005@data-eng-zcamp-liminm.iam.gserviceaccount.com"
+}
+
+
+# under the other google_project_iam_member blocks
+resource "google_project_iam_member" "viewer_for_cli" {
+  project = var.gcp_project_id
+  role    = "roles/compute.viewer"
   member     = "serviceAccount:l6194005@data-eng-zcamp-liminm.iam.gserviceaccount.com"
 }
