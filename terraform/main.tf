@@ -228,7 +228,9 @@ resource "local_file" "sa_key_json" {
 
 # define the VM blueprint that installs Docker, pulls your repo, then runs docker-compose
 resource "google_compute_instance_template" "airflow" {
-  name    = "airflow-template"
+  name_prefix = "airflow-template-"   # <-- add this
+
+  # name    = "airflow-template"
   project = var.gcp_project_id
   region  = var.gcp_region
 
@@ -245,6 +247,9 @@ resource "google_compute_instance_template" "airflow" {
     disk_type    = "pd-ssd"
   }
 
+  lifecycle {
+    create_before_destroy = true
+  }
 
   # let the VM act as your data-pipeline SA for GCS, BQ, Dataproc, Cloud SQL
   service_account {
