@@ -38,3 +38,9 @@ variable "service_account_name" {
   description = "Name of the service account."
   default     = "data-pipeline-sa"
 }
+
+variable "airflow_db_password" {
+  type        = string
+  description = "Password for the Airflow database."
+  default     = "really-strong-pw"
+}

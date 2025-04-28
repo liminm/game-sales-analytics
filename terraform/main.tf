@@ -183,7 +183,8 @@ resource "google_sql_database" "airflow" {
 resource "google_sql_user" "airflow" {
   name     = "airflow"
   instance = google_sql_database_instance.airflow_postgres.name
-  password = random_password.airflow_db_password.result
+  # password = random_password.airflow_db_password.result
+    password = var.airflow_db_password
 }
 
 # give the VM’s service account permission to connect via Cloud SQL Proxy
@@ -326,5 +327,31 @@ resource "google_compute_firewall" "airflow_allow" {
 
 
 
+# Allow the credentials mounted in the Airflow containers (airflow-proxy@…)
+# to PUT new files into the raw-data bucket.
+resource "google_storage_bucket_iam_member" "proxy_can_write_to_bucket" {
+  bucket = google_storage_bucket.data_lake_bucket.name          # <- your bucket
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.airflow_proxy.email}"
+}
 
+
+resource "google_project_iam_member" "proxy_dataproc_editor" {
+  project = var.gcp_project_id
+  role    = "roles/dataproc.editor"           # ← valid role
+  member  = "serviceAccount:${google_service_account.airflow_proxy.email}"
+}
+
+resource "google_project_iam_member" "proxy_bq_jobuser" {
+  project = var.gcp_project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.airflow_proxy.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "proxy_bq_dataeditor" {
+  project  = var.gcp_project_id
+  dataset_id = google_bigquery_dataset.data_warehouse.dataset_id
+  role     = "roles/bigquery.dataEditor"
+  member   = "serviceAccount:${google_service_account.airflow_proxy.email}"
+}
 
